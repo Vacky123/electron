@@ -8,6 +8,7 @@
 #include "atom/common/native_mate_converters/callback.h"
 #include "atom/common/native_mate_converters/file_path_converter.h"
 #include "atom/common/native_mate_converters/value_converter.h"
+#include "atom/common/promise_util.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "content/public/browser/tracing_controller.h"
@@ -78,10 +79,23 @@ bool GetCategories(
       base::BindOnce(callback));
 }
 
-bool StartTracing(const base::trace_event::TraceConfig& trace_config,
-                  const base::RepeatingCallback<void()>& callback) {
-  return TracingController::GetInstance()->StartTracing(
-      trace_config, base::BindOnce(callback));
+void OnTracingStarted(scoped_refptr<atom::util::Promise> promise) {
+  promise->Resolve();
+}
+
+v8::Local<v8::Promise> StartTracing(
+    v8::Isolate* isolate,
+    const base::trace_event::TraceConfig& trace_config) {
+  scoped_refptr<atom::util::Promise> promise = new atom::util::Promise(isolate);
+
+  bool success = TracingController::GetInstance()->StartTracing(
+      trace_config, base::BindOnce(&OnTracingStarted, promise));
+  if (!success) {
+    promise->RejectWithErrorMessage("Could not start tracing");
+    return promise->GetHandle();
+  }
+
+  return promise->GetHandle();
 }
 
 bool GetTraceBufferUsage(
